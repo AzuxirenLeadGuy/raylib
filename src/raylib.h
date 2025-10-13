@@ -956,6 +956,17 @@ typedef bool (*SaveFileDataCallback)(const char *fileName, void *data, int dataS
 typedef char *(*LoadFileTextCallback)(const char *fileName);            // FileIO: Load text data
 typedef bool (*SaveFileTextCallback)(const char *fileName, const char *text); // FileIO: Save text data
 
+typedef struct{
+    unsigned int width;
+    unsigned int height;
+} ScreenResolution;
+
+typedef struct {
+    unsigned int monitor_id;
+    unsigned int resolution_count;
+    ScreenResolution *resolutions;
+}MonitorProfile;
+
 //------------------------------------------------------------------------------------
 // Global Variables Definition
 //------------------------------------------------------------------------------------
@@ -996,6 +1007,8 @@ RLAPI void SetWindowMonitor(int monitor);                         // Set monitor
 RLAPI void SetWindowMinSize(int width, int height);               // Set window minimum dimensions (for FLAG_WINDOW_RESIZABLE)
 RLAPI void SetWindowMaxSize(int width, int height);               // Set window maximum dimensions (for FLAG_WINDOW_RESIZABLE)
 RLAPI void SetWindowSize(int width, int height);                  // Set window dimensions
+RLAPI MonitorProfile* GetSupportedModes(unsigned int monitor_id); // Get monitor profiles
+RLAPI void ClearMonitorProfile(MonitorProfile* profile);          // Destruct monitor profile object
 RLAPI void SetWindowOpacity(float opacity);                       // Set window opacity [0.0f..1.0f]
 RLAPI void SetWindowFocused(void);                                // Set window focused
 RLAPI void *GetWindowHandle(void);                                // Get native window handle

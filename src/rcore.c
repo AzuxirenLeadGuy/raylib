@@ -586,6 +586,114 @@ const char *TextFormat(const char *text, ...); // Formatting of text with variab
 //void EnableCursor(void)
 //void DisableCursor(void)
 
+struct {
+    MonitorResolution** resolutions;
+    int* resolution_count;
+} GLFW_MONITOR_PROFILES;
+
+void InitMonitorResolutionList()
+{
+#if defined(PLATFORM_DESKTOP_GLFW)
+    int count, monitor_count = GetMonitorCount();
+    GLFWmonitor **monitors = glfwGetMonitors(&count);
+    if (count <= 0 || monitors == NULL)
+    {
+        TraceLog(LOG_WARNING, "SYSTEM: Failed to initialize monitor profiles, can detect %d monitors.", count);
+        return;
+    } 
+    else if(count != monitor_count)
+    {
+        TraceLog(LOG_WARNING, "SYSTEM: Mismatch in GLFW and internal monitor count, can detect %d and %d monitors from GLFW and internal utils respectively.", count, monitor_count);
+        return;
+    }
+    GLFW_MONITOR_PROFILES.resolution_count = calloc(monitor_count, sizeof(int));
+    GLFW_MONITOR_PROFILES.resolutions = calloc(monitor_count, sizeof(MonitorResolution*));
+    for(int monitor_id=0;monitor_id<monitor_count;monitor_id++)
+    {
+        const GLFWvidmode *modes = glfwGetVideoModes(monitors[monitor_id], &count);
+        const GLFWvidmode* currentMode = glfwGetVideoMode(monitors[monitor_id]);
+        if (
+            count == 0 || 
+            modes == NULL || 
+            currentMode == NULL
+        ) 
+        { 
+            GLFW_MONITOR_PROFILES.resolution_count[monitor_id] = 0;
+            GLFW_MONITOR_PROFILES.resolutions[monitor_id] = NULL;
+            TraceLog(LOG_WARNING, "SYSTEM: Failed to get VideoModes from monitor id: %d", monitor_id);
+        }
+        int actual_count = 0, idx;
+        const int 
+            max_rr = currentMode->refreshRate,
+            max_rb = currentMode->redBits,
+            max_bb = currentMode->blueBits,
+            max_gb = currentMode->greenBits;
+        for (idx = 0; idx < count; idx++) {
+            const GLFWvidmode mode = modes[idx];
+            if (
+                mode.refreshRate != max_rr ||
+                mode.greenBits != max_gb ||
+                mode.blueBits != max_bb ||
+                mode.redBits != max_rb
+            ) { continue; }
+            actual_count++;
+        }
+        GLFW_MONITOR_PROFILES.resolution_count[monitor_id] = actual_count;
+        GLFW_MONITOR_PROFILES.resolutions[monitor_id] = calloc(actual_count, sizeof(MonitorResolution));
+        int filtered_idx = 0;
+        for (idx = 0; idx < count; idx++) {
+            const GLFWvidmode mode = modes[idx];
+            if (
+                mode.refreshRate != max_rr ||
+                mode.greenBits != max_gb ||
+                mode.blueBits != max_bb ||
+                mode.redBits != max_rb
+            ) { continue; }
+            GLFW_MONITOR_PROFILES.resolutions[monitor_id][filtered_idx].width = mode.width;
+            GLFW_MONITOR_PROFILES.resolutions[monitor_id][filtered_idx].height = mode.height;
+            filtered_idx++;
+        }
+    }
+    TRACELOG(LOG_INFO, "SYSTEM: Initialized Monitor Profiles");
+#else
+    GLFW_MONITOR_PROFILES.resolution_count = NULL;
+    GLFW_MONITOR_PROFILES.resolutions = NULL;
+#endif
+}
+
+int GetMonitorProfilesCount(int monitor_id)
+{
+    if(GLFW_MONITOR_PROFILES.resolution_count == NULL) return 0;
+    int monitor_count = GetMonitorCount();
+    if(monitor_id >= monitor_count) return 0;
+    return GLFW_MONITOR_PROFILES.resolution_count[monitor_id];
+}
+
+MonitorResolution GetResolution(int monitor_id, int id)
+{
+    MonitorResolution resolution = {0, 0};
+    if(GLFW_MONITOR_PROFILES.resolution_count == NULL) return resolution;
+    int monitor_count = GetMonitorCount();
+    if(monitor_id >= monitor_count) return resolution;
+    if(id >= GLFW_MONITOR_PROFILES.resolution_count[monitor_id]) return resolution;
+    return GLFW_MONITOR_PROFILES.resolutions[monitor_id][id];
+}
+
+void UnloadMonitorResolutionList()
+{
+    int monitor_count = GetMonitorCount();
+    if(GLFW_MONITOR_PROFILES.resolution_count == NULL){ return ;}
+    for(int monitor_id=0;monitor_id<monitor_count;monitor_id++)
+    {
+        if(GLFW_MONITOR_PROFILES.resolution_count[monitor_id] > 0)
+            free(GLFW_MONITOR_PROFILES.resolutions[monitor_id]);
+    }
+    free(GLFW_MONITOR_PROFILES.resolutions);
+    free(GLFW_MONITOR_PROFILES.resolution_count);
+    GLFW_MONITOR_PROFILES.resolutions = NULL;
+    GLFW_MONITOR_PROFILES.resolution_count = NULL;
+}
+
 // Initialize window and OpenGL context
 void InitWindow(int width, int height, const char *title)
 {
@@ -726,11 +834,15 @@ void InitWindow(int width, int height, const char *title)
     #endif
 
     TRACELOG(LOG_INFO, "SYSTEM: Working Directory: %s", GetWorkingDirectory());
+
+    InitMonitorResolutionList();
 }
 
 // Close window and unload OpenGL context
 void CloseWindow(void)
 {
+    UnloadMonitorResolutionList();
+
 #if SUPPORT_MODULE_RTEXT
     UnloadFontDefault();        // WARNING: Module required: rtext
 #endif
